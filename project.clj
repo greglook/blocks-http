@@ -11,4 +11,7 @@
    [org.clojure/clojure "1.7.0"]]
 
   :profiles
-  {:repl {:source-paths ["dev"]}})
+  {:repl {:source-paths ["dev"]
+          :dependencies
+          [[ring/ring-jetty-adapter "1.4.0"]
+           [ring-middleware-format "0.6.0"]]}})
