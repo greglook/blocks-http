@@ -12,21 +12,86 @@
 
 ;; ## HTTP Block Server
 
-; TODO: ring-compatible handler backed by another store
-
-; Say the handler was mounted at /blocks
-; GET    /blocks/?after=...&limit=...    (block/list store opts)
-; POST   /blocks/                        (block/store! store body)
-; HEAD   /blocks/:id                     (block/stat store id)
-; GET    /blocks/:id                     (block/get store id)
-; PUT    /blocks/:id                     (block/put! store body)
-; DELETE /blocks/:id                     (block/delete! store id)
-
 ; Thoughts:
 ; - Stat metadata needs to be communicated in headers.
 ; - Not clear how a client would use POST via `store!`
 ; - PUT must validate hash before storing block.
 ; - Support for DELETE should probably be configurable.
+
+
+(defn- handle-index-request
+  [store request]
+  (case (:method request)
+    ; GET /blocks/?after=...&limit=...
+    :get
+      (throw (UnsupportedOperationException. "NYI"))
+
+    ; POST /blocks/
+    :post
+      (throw (UnsupportedOperationException. "NYI"))
+
+    ; Bad method
+    {:status 405
+     :headers {"Allow" "GET, POST"}
+     :body "Method not allowed on this resource"}))
+
+
+(defn- handle-block-request
+  [store request id]
+  (case (:method request)
+    ; HEAD /blocks/:id
+    :head
+      (throw (UnsupportedOperationException. "NYI"))
+
+    ; GET /blocks/:id
+    :get
+      (throw (UnsupportedOperationException. "NYI"))
+
+    ; PUT /blocks/:id
+    :put
+      (throw (UnsupportedOperationException. "NYI"))
+
+    ; DELETE /blocks/:id
+    :delete
+      (throw (UnsupportedOperationException. "NYI"))
+
+    ; Bad method
+    {:status 405
+     :headers {"Allow" "HEAD, GET, PUT, DELETE"}
+     :body "Method not allowed on this resource"}))
+
+
+(defn ring-handler
+  "Constructs a new handler function for REST HTTP requests against the block
+  store."
+  [store mount-path]
+  (fn handler
+    [request]
+    (when-not (.startsWith ^String (:uri request) mount-path)
+      (throw (IllegalStateException.
+               (str "Routing failure: handler at " mount-path
+                    " received request for " (:uri request)))))
+    (let [path-id (subs (:uri request) (count mount-path))]
+      (cond
+        (= "" path-id)
+          (handle-index-request store request)
+
+        (not (.indexOf path-id "/"))
+          (let [id-or-err
+                (try
+                  (multihash/decode path-id)
+                  (catch Exception e
+                    {:status 400
+                     :body (str "Invalid multihash id: " (pr-str path-id)
+                                " " (.getMessage e))}))]
+            (if (:status id-or-err)
+              id-or-err
+              (handle-block-request store request id-or-err)))
+
+        :else
+          {:status 404
+           :body "Not Found"}))))
+
 
 
 
