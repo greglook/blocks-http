@@ -8,4 +8,7 @@
 
   :dependencies
   [[mvxcvi/blocks "0.6.0"]
-   [org.clojure/clojure "1.7.0"]])
+   [org.clojure/clojure "1.7.0"]]
+
+  :profiles
+  {:repl {:source-paths ["dev"]}})
