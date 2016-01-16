@@ -21,14 +21,26 @@
 
 (defn- handle-index-request
   [store request]
-  (case (:method request)
+  (case (:request-method request)
     ; GET /blocks/?after=...&limit=...
     :get
-      (throw (UnsupportedOperationException. "NYI"))
+      ; TODO: enforce maximum limit
+      (let [stats (block/list store (:params request))]
+        ; TODO: if truncated, add next link header
+        {:status 200
+         :headers {}
+         :body {:data (mapv #(let [b58-id (multihash/base58 (:id %))]
+                               (assoc %
+                                      :id b58-id
+                                      :url (str (name (:scheme request))
+                                                "://" (get-in request [:headers "Host"] "localhost")
+                                                ":" 8080
+                                                (:uri request) b58-id)))
+                            stats)}})
 
     ; POST /blocks/
     :post
-      (throw (UnsupportedOperationException. "NYI"))
+      (throw (UnsupportedOperationException. "NYI: (block/store! store body)"))
 
     ; Bad method
     {:status 405
@@ -38,22 +50,29 @@
 
 (defn- handle-block-request
   [store request id]
-  (case (:method request)
+  (case (:request-method request)
     ; HEAD /blocks/:id
     :head
-      (throw (UnsupportedOperationException. "NYI"))
+      (throw (UnsupportedOperationException. "NYI: (block/stat store id)"))
 
     ; GET /blocks/:id
     :get
-      (throw (UnsupportedOperationException. "NYI"))
+      (if-let [block (block/get store id)]
+        {:status 200
+         :headers {"Content-Type" "application/octet-stream"
+                   "Content-Size" (str (:size block))}
+         :body (block/open block)}
+        {:status 404
+         :headers {}
+         :body "Not Found"})
 
     ; PUT /blocks/:id
     :put
-      (throw (UnsupportedOperationException. "NYI"))
+      (throw (UnsupportedOperationException. "NYI: (block/put! store body)"))
 
     ; DELETE /blocks/:id
     :delete
-      (throw (UnsupportedOperationException. "NYI"))
+      (throw (UnsupportedOperationException. "NYI: (block/delete! store id)"))
 
     ; Bad method
     {:status 405
@@ -76,21 +95,22 @@
         (= "" path-id)
           (handle-index-request store request)
 
-        (not (.indexOf path-id "/"))
-          (let [id-or-err
+        (= -1 (.indexOf path-id "/"))
+          (let [[id err]
                 (try
-                  (multihash/decode path-id)
+                  [(multihash/decode path-id) nil]
                   (catch Exception e
-                    {:status 400
-                     :body (str "Invalid multihash id: " (pr-str path-id)
-                                " " (.getMessage e))}))]
-            (if (:status id-or-err)
-              id-or-err
-              (handle-block-request store request id-or-err)))
+                    [nil
+                     {:status 400
+                      :headers {}
+                      :body (str "Invalid multihash id: " (pr-str path-id)
+                                " " (.getMessage e))}]))]
+            (or err (handle-block-request store request id)))
 
         :else
-          {:status 404
-           :body "Not Found"}))))
+          {:status (do (prn path-id) 404)
+           :headers {}
+           :body "No Matching Resource"}))))
 
 
 
