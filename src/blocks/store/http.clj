@@ -47,7 +47,7 @@
 
     ; POST /blocks/
     :post
-      (if-let [size (:content-length (doto request prn))]
+      (if-let [size (:content-length request)]
         (if (pos? size)
           (if-let [block (block/store! store (:body request))]
             {:status 201
