@@ -40,12 +40,16 @@
 
     ; POST /blocks/
     :post
-      ; TODO: check Content-Length
-      (if-let [block (block/store! store (:body request))]
-        {:status 201
-         :headers {"Location" (str "/" (multihash/base58 (:id block)))} ; TODO: actual prefix
-         :body {:id (multihash/base58 (:id block))
-                :size (:size block)}})
+      (if-let [size (:content-length (doto request prn))]
+        (if (pos? size)
+          (if-let [block (block/store! store (:body request))]
+            {:status 201
+             :headers {"Location" (str "/" (multihash/base58 (:id block)))} ; TODO: actual prefix
+             :body {:id (multihash/base58 (:id block))
+                    :size (:size block)}})
+          {:status 411
+           :headers {}
+           :body "Cannot store block with no content"}))
 
     ; Bad method
     {:status 405
