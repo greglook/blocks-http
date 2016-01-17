@@ -92,12 +92,13 @@
 
     ; DELETE /blocks/:id
     :delete
-      (do
-        (block/delete! store id)
-        ; TODO: return success response somehow
+      (if (block/delete! store id)
         {:status 204
          :headers {}
-         :body ""})
+         :body (str "Block " id " deleted")}
+        {:status 404
+         :headers {}
+         :body (str "Block " id " not found in store")})
 
     ; Bad method
     {:status 405
