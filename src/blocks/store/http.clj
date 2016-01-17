@@ -33,8 +33,8 @@
                                (assoc %
                                       :id b58-id
                                       :url (str (name (:scheme request))
-                                                "://" (get-in request [:headers "Host"] "localhost")
-                                                ":" 8080
+                                                "://" (:server-name request)
+                                                ":" (:server-port request)
                                                 (:uri request) b58-id)))
                             stats)}})
 
