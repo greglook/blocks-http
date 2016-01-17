@@ -18,6 +18,13 @@
 ; - PUT must validate hash before storing block.
 ; - Support for DELETE should probably be configurable.
 
+(defn- format-date
+  [^java.util.Date date]
+  (when date
+    (-> (java.text.SimpleDateFormat. "EEE, dd MMM YYYY HH:mm:ss Z")
+        (doto (.setTimeZone (java.util.TimeZone/getTimeZone "GMT")))
+        (.format date))))
+
 
 (defn- handle-index-request
   [store request]
@@ -70,11 +77,13 @@
       (if-let [block (block/get store id)]
         {:status 200
          :headers {"Content-Type" "application/octet-stream"
-                   "Content-Length" (str (:size block))}
+                   "Content-Length" (str (:size block))
+                   "Last-Modified" (format-date (:stored-at (block/meta-stats block)))}
+         ; TODO: support ranged-open (Accept-Ranges: bytes / Content-Range: bytes 21010-47021/47022)
          :body (block/open block)}
         {:status 404
          :headers {}
-         :body "Not Found"})
+         :body (str "Block " id " not found in store")})
 
     ; PUT /blocks/:id
     :put
@@ -87,7 +96,7 @@
                          (:id block) id)}
           (let [stored (block/put! store block)]
             {:status 204
-             :headers {} ; TODO: stat metadata
+             :headers {"Last-Modified" (format-date (:stored-at (block/meta-stats stored)))}
              :body nil})))
 
     ; DELETE /blocks/:id
