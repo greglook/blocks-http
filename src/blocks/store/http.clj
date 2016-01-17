@@ -69,8 +69,14 @@
   (case (:request-method request)
     ; HEAD /blocks/:id
     :head
-      ; TODO: return block metadata as headers
-      (throw (UnsupportedOperationException. "NYI: (block/stat store id)"))
+      (if-let [stats (block/stat store id)]
+        {:status 200
+         :headers {"Content-Length" (str (:size stats))
+                   "Last-Modified" (format-date (:stored-at stats))}
+         :body nil}
+        {:status 404
+         :headers {}
+         :body nil})
 
     ; GET /blocks/:id
     :get
