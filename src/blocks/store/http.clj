@@ -40,7 +40,12 @@
 
     ; POST /blocks/
     :post
-      (throw (UnsupportedOperationException. "NYI: (block/store! store body)"))
+      ; TODO: check Content-Length
+      (if-let [block (block/store! store (:body request))]
+        {:status 201
+         :headers {"Location" (str "/" (multihash/base58 (:id block)))} ; TODO: actual prefix
+         :body {:id (multihash/base58 (:id block))
+                :size (:size block)}})
 
     ; Bad method
     {:status 405
@@ -53,6 +58,7 @@
   (case (:request-method request)
     ; HEAD /blocks/:id
     :head
+      ; TODO: return block metadata as headers
       (throw (UnsupportedOperationException. "NYI: (block/stat store id)"))
 
     ; GET /blocks/:id
@@ -60,7 +66,7 @@
       (if-let [block (block/get store id)]
         {:status 200
          :headers {"Content-Type" "application/octet-stream"
-                   "Content-Size" (str (:size block))}
+                   "Content-Length" (str (:size block))}
          :body (block/open block)}
         {:status 404
          :headers {}
@@ -68,11 +74,26 @@
 
     ; PUT /blocks/:id
     :put
-      (throw (UnsupportedOperationException. "NYI: (block/put! store body)"))
+      (let [block (block/read! (:body request))]
+        ; TODO: validate Content-Length header, reject with 411
+        (if (not= id (:id block))
+          {:status 400
+           :headers {}
+           :body (format "Request body %s does not match requested hash %s"
+                         (:id block) id)}
+          (let [stored (block/put! store block)]
+            {:status 204
+             :headers {} ; TODO: stat metadata
+             :body nil})))
 
     ; DELETE /blocks/:id
     :delete
-      (throw (UnsupportedOperationException. "NYI: (block/delete! store id)"))
+      (do
+        (block/delete! store id)
+        ; TODO: return success response somehow
+        {:status 204
+         :headers {}
+         :body ""})
 
     ; Bad method
     {:status 405
