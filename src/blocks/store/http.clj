@@ -18,6 +18,8 @@
 ; - PUT must validate hash before storing block.
 ; - Support for DELETE should probably be configurable.
 
+;; ### Helper Functions
+
 (defn- format-date
   [^java.util.Date date]
   (when date
@@ -26,99 +28,163 @@
         (.format date))))
 
 
-(defn- handle-index-request
+(defn- parse-multihash
+  "Parse the given string as a multihash - if the parsing succeeds, calls the
+  given function with the id. Otherwise, returns a 400 bad request."
+  [f str-id]
+  (let [[id err]
+        (try
+          [(multihash/decode str-id) nil]
+          (catch Exception e
+            [nil
+             {:status 400
+              :headers {}
+              :body (str "Invalid multihash id: " (pr-str str-id)
+                        " " (.getMessage e))}]))]
+    (or err (f id))))
+
+
+(defn- request-url
+  "Return the full string url a request was made for."
+  [request]
+  (str (name (:scheme request))
+    "://" (:server-name request)
+    ":" (:server-port request)
+    (:uri request)))
+
+
+(defn- block-headers
+  "Default header set for block metadata."
+  [block]
+  (let [stored-at (or (:stored-at block)
+                      (:stored-at (block/meta-stats block)))]
+    (cond->
+      {"Content-Type" "application/octet-stream"
+       "Content-Length" (str (:size block))}
+      stored-at
+        (assoc "Last-Modified" (format-date stored-at)))))
+
+
+(defn- not-found
+  "Returns a 404 Not Found response map with the given body."
+  [body]
+  {:status 404
+   :headers {}
+   :body body})
+
+
+(defn- method-not-allowed
+  "Returns a 405 Method Not Allowed response map. The response will indicate
+  the allowed methods with a header."
+  [allowed-methods]
+  {:status 405
+   :headers {"Allow" (str/join ", " (map (comp str/upper-case name) allowed-methods))}
+   :body "Method not allowed on this resource"})
+
+
+
+;; ### Handler Functions
+
+(defn- handle-list
+  "Handles a request to list the stored blocks."
+  [store request]
+  ; TODO: enforce maximum limit
+  (let [stats (block/list store (:params request))]
+    ; TODO: if truncated, add next link header
+    {:status 200
+     :headers {}
+     :body {:data (mapv #(let [b58-id (multihash/base58 (:id %))]
+                           (assoc % :id b58-id :url (str (request-url request) b58-id)))
+                        stats)}}))
+
+
+(defn- handle-store!
+  "Handles a reques tto store a new block."
+  [store request]
+  (let [size (:content-length request)]
+    (if (and size (pos? size))
+      (let [block (block/store! store (:body request))]
+        {:status 201
+         :headers {"Location" (str (request-url request) (multihash/base58 (:id block)))}
+         :body {:id (multihash/base58 (:id block))
+                :size (:size block)
+                :stored-at (format-date (:stored-at (block/meta-stats block)))}})
+      {:status 411
+       :headers {}
+       :body "Cannot store block with no content"})))
+
+
+(defn- handle-stat
+  [store request id]
+  (if-let [stats (block/stat store id)]
+    {:status 200
+     :headers (block-headers stats)
+     :body nil}
+    (not-found nil)))
+
+
+(defn- handle-get
+  [store request id]
+  (if-let [block (block/get store id)]
+    {:status 200
+     :headers (block-headers block)
+     ; TODO: support ranged-open (Accept-Ranges: bytes / Content-Range: bytes 21010-47021/47022)
+     :body (block/open block)}
+    (not-found (str "Block " id " not found in store"))))
+
+
+(defn- handle-put!
+  [store request id]
+  (let [block (block/read! (:body request))]
+    ; TODO: validate Content-Length header, reject with 411
+    (if (not= id (:id block))
+      {:status 400
+       :headers {}
+       :body (format "Request body %s does not match requested hash %s"
+                     (:id block) id)}
+      (let [stored (block/put! store block)]
+        {:status 204
+         :headers {"Last-Modified" (format-date (:stored-at (block/meta-stats stored)))}
+         :body nil}))))
+
+
+(defn- handle-delete!
+  [store request id]
+  (if (block/delete! store id)
+    {:status 204
+     :headers {}
+     :body (str "Block " id " deleted")}
+    (not-found (str "Block " id " not found in store"))))
+
+
+
+;; ### Routing Functions
+
+(defn- route-collection-request
   [store request]
   (case (:request-method request)
     ; GET /blocks/?after=...&limit=...
-    :get
-      ; TODO: enforce maximum limit
-      (let [stats (block/list store (:params request))]
-        ; TODO: if truncated, add next link header
-        {:status 200
-         :headers {}
-         :body {:data (mapv #(let [b58-id (multihash/base58 (:id %))]
-                               (assoc %
-                                      :id b58-id
-                                      :url (str (name (:scheme request))
-                                                "://" (:server-name request)
-                                                ":" (:server-port request)
-                                                (:uri request) b58-id)))
-                            stats)}})
-
+    :get  (handle-list store request)
     ; POST /blocks/
-    :post
-      (if-let [size (:content-length request)]
-        (if (pos? size)
-          (if-let [block (block/store! store (:body request))]
-            {:status 201
-             :headers {"Location" (str "/" (multihash/base58 (:id block)))} ; TODO: actual prefix
-             :body {:id (multihash/base58 (:id block))
-                    :size (:size block)}})
-          {:status 411
-           :headers {}
-           :body "Cannot store block with no content"}))
-
+    :post (handle-store! store request)
     ; Bad method
-    {:status 405
-     :headers {"Allow" "GET, POST"}
-     :body "Method not allowed on this resource"}))
+    (method-not-allowed [:get :post])))
 
 
-(defn- handle-block-request
+(defn- route-block-request
   [store request id]
+  ; TODO: cache-control headers
   (case (:request-method request)
     ; HEAD /blocks/:id
-    :head
-      (if-let [stats (block/stat store id)]
-        {:status 200
-         :headers {"Content-Length" (str (:size stats))
-                   "Last-Modified" (format-date (:stored-at stats))}
-         :body nil}
-        {:status 404
-         :headers {}
-         :body nil})
-
+    :head (handle-stat store request id)
     ; GET /blocks/:id
-    :get
-      (if-let [block (block/get store id)]
-        {:status 200
-         :headers {"Content-Type" "application/octet-stream"
-                   "Content-Length" (str (:size block))
-                   "Last-Modified" (format-date (:stored-at (block/meta-stats block)))}
-         ; TODO: support ranged-open (Accept-Ranges: bytes / Content-Range: bytes 21010-47021/47022)
-         :body (block/open block)}
-        {:status 404
-         :headers {}
-         :body (str "Block " id " not found in store")})
-
+    :get (handle-get store request id)
     ; PUT /blocks/:id
-    :put
-      (let [block (block/read! (:body request))]
-        ; TODO: validate Content-Length header, reject with 411
-        (if (not= id (:id block))
-          {:status 400
-           :headers {}
-           :body (format "Request body %s does not match requested hash %s"
-                         (:id block) id)}
-          (let [stored (block/put! store block)]
-            {:status 204
-             :headers {"Last-Modified" (format-date (:stored-at (block/meta-stats stored)))}
-             :body nil})))
-
+    :put (handle-put! store request id)
     ; DELETE /blocks/:id
-    :delete
-      (if (block/delete! store id)
-        {:status 204
-         :headers {}
-         :body (str "Block " id " deleted")}
-        {:status 404
-         :headers {}
-         :body (str "Block " id " not found in store")})
-
+    :delete (handle-delete! store request id)
     ; Bad method
-    {:status 405
-     :headers {"Allow" "HEAD, GET, PUT, DELETE"}
-     :body "Method not allowed on this resource"}))
+    (method-not-allowed [:head :get :put :delete])))
 
 
 (defn ring-handler
@@ -134,24 +200,14 @@
     (let [path-id (subs (:uri request) (count mount-path))]
       (cond
         (= "" path-id)
-          (handle-index-request store request)
+          (route-collection-request store request)
 
         (= -1 (.indexOf path-id "/"))
-          (let [[id err]
-                (try
-                  [(multihash/decode path-id) nil]
-                  (catch Exception e
-                    [nil
-                     {:status 400
-                      :headers {}
-                      :body (str "Invalid multihash id: " (pr-str path-id)
-                                " " (.getMessage e))}]))]
-            (or err (handle-block-request store request id)))
+          (parse-multihash (partial route-block-request store request)
+                           path-id)
 
         :else
-          {:status (do (prn path-id) 404)
-           :headers {}
-           :body "No Matching Resource"}))))
+          (not-found "No matching resource")))))
 
 
 
