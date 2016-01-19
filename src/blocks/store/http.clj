@@ -244,8 +244,9 @@
       (let [response (http/head (block-url server-url id))]
         (case (:status response)
           ; TODO: parse metadata from headers
-          200 (do (prn response)
-                  (throw (UnsupportedOperationException. "NYI")))
+          200 {:id id
+               :stored-at (parse-date (get-in response [:headers "Last-Modified"]))
+               :size (Integer/parseInt (get-in response [:headers "Content-Length"]))}
 
           ; Block wasn't found.
           404 nil
