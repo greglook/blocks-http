@@ -21,12 +21,25 @@
 
 ;; ### Helper Functions
 
+(defn- date-format
+  ^java.text.SimpleDateFormat
+  []
+  (doto (java.text.SimpleDateFormat. "EEE, dd MMM YYYY HH:mm:ss Z")
+    (.setTimeZone (java.util.TimeZone/getTimeZone "GMT"))))
+
+
 (defn- format-date
+  ^String
   [^java.util.Date date]
   (when date
-    (-> (java.text.SimpleDateFormat. "EEE, dd MMM YYYY HH:mm:ss Z")
-        (doto (.setTimeZone (java.util.TimeZone/getTimeZone "GMT")))
-        (.format date))))
+    (.format (date-format) date)))
+
+
+(defn- parse-date
+  ^java.util.Date
+  [^String string]
+  (when string
+    (.parse (date-format) string)))
 
 
 (defn- parse-multihash
