@@ -133,7 +133,7 @@
   (if-let [stats (block/stat store id)]
     {:status 200
      :headers (block-headers stats)
-     :body nil}
+     :body ""}
     (not-found nil)))
 
 
