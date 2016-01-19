@@ -45,6 +45,10 @@
     (jetty/run-jetty handler options)))
 
 
+(def client
+  (http-store "http://127.0.0.1:8080/blocks/"))
+
+
 (defn start!
   []
   (when-not (.isStarted server)

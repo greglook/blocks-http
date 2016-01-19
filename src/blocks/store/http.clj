@@ -215,6 +215,11 @@
 
 ;; ## HTTP Block Client
 
+(defn- block-url
+  [server-url id]
+  (str server-url (multihash/base58 id)))
+
+
 (defrecord HTTPBlockClient
   [server-url]
 
@@ -222,17 +227,28 @@
 
   (-stat
     [this id]
-    ; HEAD /:id
-    (throw (UnsupportedOperationException. "NYI")))
+    (when id
+      (let [response (http/head (block-url server-url id))]
+        (case (:status response)
+          ; TODO: parse metadata from headers
+          200 (do (prn response)
+                  (throw (UnsupportedOperationException. "NYI")))
+
+          ; Block wasn't found.
+          404 nil
+
+          ; Some other status.
+          (throw (ex-info (str "Unsuccessful blocks-http response: "
+                               (:status response) " - "
+                               (:error (:body response) "--"))
+                          (:body response)))))))
 
 
   (-list
     [this opts]
-    ; GET /
-    (let [response (http/get (str server-url "/")
-                     {:query-params opts
-                      ;:debug true
-                      :as :json})]
+    (let [response (http/get server-url {:query-params opts
+                                  ;:debug true
+                                  :as :json})]
       (when (not= 200 (:status response))
         (throw (ex-info (str "Unsuccessful blocks-http response: "
                              (:status response) " - "
@@ -244,23 +260,32 @@
 
   (-get
     [this id]
-    ; TODO: stat the block and return a lazy block
-    (throw (UnsupportedOperationException. "NYI")))
+    (when-let [stats (.-stat this id)]
+      ; TODO: return a lazy block
+      (throw (UnsupportedOperationException. "NYI"))))
 
 
   (-put!
     [this block]
-    ; TODO: PUT /:id
-    (throw (UnsupportedOperationException. "NYI")))
+    (when block
+      (throw (UnsupportedOperationException. "NYI"))
+      ; TODO: store block content
+      (let [response (http/put (block-url server-url (:id block)))]
+        ; TODO: PUT /:id
+        )))
 
 
   (-delete!
     [this id]
-    ; TODO: DELETE /:id
-    (throw (UnsupportedOperationException. "NYI"))))
+    (when id
+      (throw (UnsupportedOperationException. "NYI"))
+      (let [response (http/delete (block-url server-url id))]
+        ; TODO: parse response for successful deletion
+        ))))
 
 
 (defn http-store
+  "Creates a new HTTP block store client."
   [server-url]
   (HTTPBlockClient. server-url))
 
