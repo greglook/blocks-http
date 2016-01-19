@@ -1,6 +1,7 @@
 (ns blocks.store.http
   "Block storage transport over HTTP."
   (:require
+    [clj-http.client :as http]
     (blocks
       [core :as block]
       [data :as data]
@@ -221,26 +222,41 @@
 
   (-stat
     [this id]
+    ; HEAD /:id
     (throw (UnsupportedOperationException. "NYI")))
 
 
   (-list
     [this opts]
-    (throw (UnsupportedOperationException. "NYI")))
+    ; GET /
+    (let [response (http/get (str server-url "/")
+                     {:query-params opts
+                      ;:debug true
+                      :as :json})]
+      (when (not= 200 (:status response))
+        (throw (ex-info (str "Unsuccessful blocks-http response: "
+                             (:status response) " - "
+                             (:error (:body response) "--"))
+                        (:body response))))
+      ; TODO: lazy seq a-la s3
+      (:data (:body response))))
 
 
   (-get
     [this id]
+    ; TODO: stat the block and return a lazy block
     (throw (UnsupportedOperationException. "NYI")))
 
 
   (-put!
     [this block]
+    ; TODO: PUT /:id
     (throw (UnsupportedOperationException. "NYI")))
 
 
   (-delete!
     [this id]
+    ; TODO: DELETE /:id
     (throw (UnsupportedOperationException. "NYI"))))
 
 
