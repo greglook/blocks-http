@@ -7,12 +7,12 @@
   :deploy-branches ["master"]
 
   :dependencies
-  [[clj-http "1.1.2"]
-   [mvxcvi/blocks "0.6.0"]
-   [org.clojure/clojure "1.7.0"]]
+  [[clj-http "2.0.1"]
+   [mvxcvi/blocks "0.6.1"]
+   [org.clojure/clojure "1.8.0"]]
 
   :profiles
   {:repl {:source-paths ["dev"]
           :dependencies
           [[ring/ring-jetty-adapter "1.4.0"]
-           [ring-middleware-format "0.6.0"]]}})
+           [ring-middleware-format "0.7.0"]]}})
