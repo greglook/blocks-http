@@ -4,7 +4,8 @@
   (:require
     [clj-http.client :as http]
     (blocks
-      ;[core :as block]
+      [core :as block]
+      [data :as data]
       [store :as store])
     [blocks.store.http.util :as util]
     [multihash.core :as multihash]))
@@ -65,8 +66,23 @@
   (-get
     [this id]
     (when-let [stats (.-stat this id)]
-      ; TODO: return a lazy block
-      (throw (UnsupportedOperationException. "NYI"))))
+      ; TODO: return a lazy block instead
+      (let [response (http/get (block-url server-url id)
+                               {:throw-exceptions false})]
+        (condp = (:status response)
+          200 (block/with-stats
+                (block/read! (:body response))
+                (util/header-stats (:headers response)))
+
+          ; Block wasn't found.
+          404 nil
+
+          ; Some other status.
+          (throw (ex-info (str "Unsuccessful blocks-http response: "
+                               (:status response) " - "
+                               (:error (:body response) "--"))
+                          {:status (:status response)
+                           :body (:body response)}))))))
 
 
   (-put!
