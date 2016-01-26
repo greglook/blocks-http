@@ -26,7 +26,8 @@
   (-stat
     [this id]
     (when id
-      (let [response (http/head (block-url server-url id))]
+      (let [response (http/head (block-url server-url id)
+                                {:throw-exceptions false})]
         (condp = (:status response)
           ; Successful response.
           200 (assoc (util/header-stats (:headers response))
@@ -35,23 +36,27 @@
           ; Block wasn't found.
           404 nil
 
-          ; Some other status.
+          ; Some other error status.
           (throw (ex-info (str "Unsuccessful blocks-http response: "
                                (:status response) " - "
                                (:error (:body response) "--"))
-                          (:body response)))))))
+                          {:status (:status response)
+                           :body (:body response)}))))))
 
 
   (-list
     [this opts]
-    (let [response (http/get server-url {:query-params opts
-                                  ;:debug true
-                                  :as :json})]
+    (let [response (http/get server-url
+                             {:query-params opts
+                              :throw-exceptions false
+                              ;:debug true
+                              :as :json})]
       (when (not= 200 (:status response))
         (throw (ex-info (str "Unsuccessful blocks-http response: "
                              (:status response) " - "
                              (:error (:body response) "--"))
-                        (:body response))))
+                        {:status (:status response)
+                         :body (:body response)})))
       ; TODO: lazy seq a-la s3
       ; TODO: parse :id and :stored-at
       (:data (:body response))))
