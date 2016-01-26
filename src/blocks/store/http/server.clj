@@ -45,18 +45,6 @@
     (:uri request)))
 
 
-(defn- block-headers
-  "Default header set for block metadata."
-  [block]
-  (let [stored-at (or (:stored-at block)
-                      (:stored-at (block/meta-stats block)))]
-    (cond->
-      {"Content-Type" "application/octet-stream"
-       "Content-Length" (str (:size block))}
-      stored-at
-        (assoc "Last-Modified" (util/format-date stored-at)))))
-
-
 (defn- not-found
   "Returns a 404 Not Found response map with the given body."
   [body]
@@ -110,7 +98,7 @@
   [store request id]
   (if-let [stats (block/stat store id)]
     {:status 200
-     :headers (block-headers stats)
+     :headers (util/block-headers stats)
      :body ""}
     (not-found nil)))
 
@@ -119,7 +107,7 @@
   [store request id]
   (if-let [block (block/get store id)]
     {:status 200
-     :headers (block-headers block)
+     :headers (util/block-headers block)
      ; TODO: support ranged-open (Accept-Ranges: bytes / Content-Range: bytes 21010-47021/47022)
      :body (block/open block)}
     (not-found (str "Block " id " not found in store"))))

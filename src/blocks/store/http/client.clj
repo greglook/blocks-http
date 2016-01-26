@@ -28,10 +28,9 @@
     (when id
       (let [response (http/head (block-url server-url id))]
         (condp = (:status response)
-          ; TODO: parse metadata from headers
-          200 {:id id
-               :stored-at (util/parse-date (get-in response [:headers "Last-Modified"]))
-               :size (Integer/parseInt (get-in response [:headers "Content-Length"]))}
+          ; Successful response.
+          200 (assoc (util/header-stats (:headers response))
+                     :id id)
 
           ; Block wasn't found.
           404 nil
