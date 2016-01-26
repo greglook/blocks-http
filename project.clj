@@ -11,6 +11,10 @@
    [mvxcvi/blocks "0.6.1"]
    [org.clojure/clojure "1.8.0"]]
 
+  :whidbey
+  {:tag-types {'blocks.data.Block {'blocks.data.Block (partial into {})}
+               'multihash.core.Multihash {'data/hash 'multihash.core/base58}}}
+
   :profiles
   {:repl {:source-paths ["dev"]
           :dependencies
