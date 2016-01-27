@@ -7,6 +7,7 @@
       [store :as store])
     [blocks.store.http.util :as util]
     [clojure.string :as str]
+    [clojure.tools.logging :as log]
     [multihash.core :as multihash]))
 
 

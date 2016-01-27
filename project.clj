@@ -9,7 +9,8 @@
   :dependencies
   [[clj-http "2.0.1"]
    [mvxcvi/blocks "0.6.1"]
-   [org.clojure/clojure "1.8.0"]]
+   [org.clojure/clojure "1.8.0"]
+   [org.clojure/tools.logging "0.3.1"]]
 
   :whidbey
   {:tag-types {'blocks.data.Block {'blocks.data.Block (partial into {})}
