@@ -18,28 +18,25 @@
 
 (defmacro ^:private do-request
   [request & body]
-  (let [[success body] (if (and (< 1 (count body))
-                                (integer? (first body)))
-                         [(first body) (rest body)]
-                         [200 body])]
-    `(let [response# ~request]
-       (condp = (:status response#)
-         ; Successful response.
-         ~success
+  `(let [response# (http/request ~(assoc request :throw-exceptions false))]
+     (cond
+       ; Successful response.
+       (http/success? response#)
          (let [~'response response#]
            ~@body)
 
-         ; Not found.
-         404 nil
+       ; Not found.
+       (http/missing? response#)
+         nil
 
-         ; Some other error status.
+       ; Some other error status.
+       :else
          (throw (ex-info (str "Unsuccessful blocks-http response: "
                               (:status response#) " - "
-                              (:error (:body response#) "--"))
-                         {:expected ~success
-                          :status (:status response#)
+                              (:body response#))
+                         {:status (:status response#)
                           :headers (:headers response#)
-                          :body (:body response#)}))))))
+                          :body (:body response#)})))))
 
 
 
@@ -53,8 +50,8 @@
   (-stat
     [this id]
     (when id
-      (do-request (http/head (block-url server-url id)
-                             {:throw-exceptions false})
+      (do-request {:method :head
+                   :url (block-url server-url id)}
         (-> (:headers response)
             (util/header-stats)
             (assoc :id id)))))
@@ -62,26 +59,22 @@
 
   (-list
     [this opts]
-    (do-request (http/get server-url
-                          {:query-params opts
-                           :throw-exceptions false
-                           :accept :edn
-                           :debug true
-                           :as :edn})
-      ; TODO: lazy seq a-la s3
-      ; TODO: parse :id and :stored-at
-      (->> (:body response)
-           (:data)
-           (map #(-> % (update :id multihash/decode)
-                       (update :stored-at util/parse-date))))))
+    (binding [*data-readers* (assoc *data-readers* 'data/hash multihash/decode)]
+      (do-request {:method :get
+                   :url server-url
+                   :query-params opts
+                   :accept :edn
+                   :as :clojure}
+        ; TODO: lazy seq a-la s3
+        (:data (:body response)))))
 
 
   (-get
     [this id]
-    (when-let [stats (.-stat this id)]
+    (when id
       ; TODO: return a lazy block instead?
-      (do-request (http/get (block-url server-url id)
-                            {:throw-exceptions false})
+      (do-request {:method :get
+                   :url (block-url server-url id)}
         (block/with-stats
           (block/read! (:body response))
           (util/header-stats (:headers response))))))
@@ -90,12 +83,11 @@
   (-put!
     [this block]
     (when block
-      (do-request (http/put (block-url server-url (:id block))
-                            {:body (block/open block)
-                             :length (:size block)
-                             :content-type "application/octet-stream"
-                             :throw-exceptions false})
-        204
+      (do-request {:method :put
+                   :url (block-url server-url (:id block))
+                   :body (block/open block)
+                   :length (:size block)
+                   :content-type "application/octet-stream"}
         (block/with-stats
           block
           (dissoc (util/header-stats (:headers response)) :size)))))
@@ -104,10 +96,10 @@
   (-delete!
     [this id]
     (when id
-      (throw (UnsupportedOperationException. "NYI"))
-      (do-request (http/delete (block-url server-url id))
-        ; TODO: parse response for successful deletion
-        ))))
+      (boolean
+        (do-request {:method :delete
+                     :url (block-url server-url id)}
+          true)))))
 
 
 (defn http-store

@@ -75,7 +75,8 @@
     {:status 200
      :headers {}
      :body {:data (mapv #(let [b58-id (multihash/base58 (:id %))]
-                           (assoc % :id b58-id :url (str (request-url request) b58-id)))
+                           (assoc % :id (tagged-literal 'data/hash b58-id)
+                                    :url (str (request-url request) b58-id)))
                         stats)}}))
 
 
@@ -126,7 +127,7 @@
       (let [stored (block/put! store block)]
         {:status 204
          :headers {"Last-Modified" (util/format-date (:stored-at (block/meta-stats stored)))}
-         :body nil}))))
+         :body ""}))))
 
 
 (defn- handle-delete!
