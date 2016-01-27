@@ -9,6 +9,7 @@
     [clojure.java.io :as io]
     [clojure.repl :refer :all]
     [clojure.string :as str]
+    [clojure.tools.logging :as log]
     [multihash.core :as multihash]
     [ring.adapter.jetty :as jetty]
     (ring.middleware
@@ -27,6 +28,24 @@
 (try (require '[clojure.tools.namespace.repl :refer [refresh]]) (catch Exception e nil))
 
 
+(defn wrap-request-logger
+  "Ring middleware to log information about service requests."
+  [handler logger-ns]
+  (fn [{:keys [uri remote-addr request-method] :as request}]
+    (let [start (System/nanoTime)
+          method (str/upper-case (name request-method))]
+      (log/log logger-ns :debug nil
+               (format "%s %s %s" remote-addr method uri))
+      (let [{:keys [status headers] :as response} (handler request)
+            elapsed (/ (- (System/nanoTime) start) 1000000.0)
+            msg (format "%s %s %s -> %s (%.3f ms)"
+                        remote-addr method uri status elapsed)]
+        (log/log logger-ns
+                 (if (<= 400 status 599) :warn :info)
+                 nil msg)
+        response))))
+
+
 (def backing-store
   (memory-store))
 
@@ -35,7 +54,8 @@
   (let [handler (-> (ring-handler backing-store "/blocks/")
                     (wrap-keyword-params)
                     (wrap-params)
-                    (wrap-restful-format :formats [:json :edn]))
+                    (wrap-restful-format :formats [:edn :json])
+                    (wrap-request-logger 'blocks.store.http.server))
         options {:server "127.0.0.1"
                  :port 8080
                  :min-threads 2
