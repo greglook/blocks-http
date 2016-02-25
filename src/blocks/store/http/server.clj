@@ -173,20 +173,23 @@
   "Constructs a new handler function for REST HTTP requests against the block
   store."
   [store mount-path]
-  (fn handler
-    [request]
-    (when-not (str/starts-with? (:uri request) mount-path)
-      (throw (IllegalStateException.
-               (str "Routing failure: handler at " mount-path
-                    " received request for " (:uri request)))))
-    (let [path-id (subs (:uri request) (count mount-path))]
-      (cond
-        (= "" path-id)
-          (route-collection-request store request)
+  (let [mount-path (if (str/ends-with? mount-path "/")
+                     (subs mount-path 0 (dec (count mount-path)))
+                     mount-path)]
+    (fn handler
+      [request]
+      (when-not (str/starts-with? (:uri request) mount-path)
+        (throw (IllegalStateException.
+                 (str "Routing failure: handler at " mount-path
+                      " received request for " (:uri request)))))
+      (let [path-id (subs (:uri request) (count mount-path))]
+        (cond
+          (= "" path-id)
+            (route-collection-request store request)
 
-        (= -1 (.indexOf path-id "/"))
-          (parse-multihash (partial route-block-request store request)
-                           path-id)
+          (re-matches #"/[a-zA-Z0-9]+" path-id)
+            (parse-multihash (partial route-block-request store request)
+                             (subs path-id 1))
 
-        :else
-          (not-found "No matching resource")))))
+          :else
+            (not-found "No matching resource"))))))
